@@ -3,18 +3,21 @@ package com.example.arplacement
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -23,29 +26,50 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import android.widget.Toast
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.viewinterop.AndroidView
-import io.github.sceneview.ar.ArSceneView
-import io.github.sceneview.ar.node.ArModelNode
-import io.github.sceneview.ar.node.PlacementMode
+import io.github.sceneview.ar.ARScene
+import io.github.sceneview.ar.rememberARCameraStream
+import io.github.sceneview.rememberEngine
+import io.github.sceneview.rememberModelLoader
+import io.github.sceneview.rememberMaterialLoader
+import io.github.sceneview.rememberEnvironmentLoader
+import io.github.sceneview.node.ModelNode
+import io.github.sceneview.math.Position
+import com.google.ar.core.Config
 import com.example.arplacement.ui.theme.ARPlacementTheme
 
 // Data class for Drill
 data class Drill(
     val name: String,
     val description: String,
-    val imageResId: Int,
-    val tips: String
+    val icon: ImageVector,
+    val tips: String,
+    val color: Color
 )
 
-// Mock drill data
+// Mock drill data with icons instead of missing image resources
 val drills = listOf(
-    Drill("Drill 1", "A powerful cordless drill for heavy-duty tasks.", R.drawable.drill1, "Use with care, ensure battery is charged."),
-    Drill("Drill 2", "A compact drill for precision work.", R.drawable.drill2, "Ideal for small spaces, check bit alignment."),
-    Drill("Drill 3", "A versatile drill for general use.", R.drawable.drill3, "Adjust speed for different materials.")
+    Drill(
+        "Heavy Duty Drill",
+        "A powerful cordless drill for heavy-duty construction tasks and masonry work.",
+        Icons.Default.Build,
+        "Use with care, ensure battery is charged. Wear safety goggles.",
+        Color(0xFF2196F3)
+    ),
+    Drill(
+        "Precision Drill",
+        "A compact drill perfect for precision work and detailed craftsmanship.",
+        Icons.Default.Build,
+        "Ideal for small spaces, check bit alignment. Use low speed for delicate materials.",
+        Color(0xFF4CAF50)
+    ),
+    Drill(
+        "All-Purpose Drill",
+        "A versatile drill suitable for general household and workshop use.",
+        Icons.Default.Build,
+        "Adjust speed for different materials. Great for beginners.",
+        Color(0xFFFF9800)
+    )
 )
 
 class MainActivity : ComponentActivity() {
@@ -53,7 +77,12 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             ARPlacementTheme {
-                AppNavigation()
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    AppNavigation()
+                }
             }
         }
     }
@@ -75,36 +104,52 @@ fun AppNavigation() {
         }
         composable("ar_view/{drillName}") { backStackEntry ->
             val drillName = backStackEntry.arguments?.getString("drillName") ?: ""
-            ARViewScreen(drillName)
+            val drill = drills.find { it.name == drillName }
+            drill?.let {
+                ARViewScreen(it)
+            }
         }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DrillSelectionScreen(navController: NavController) {
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        TopAppBar(
+            title = {
+                Text(
+                    text = "AR Drill Placement",
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
         Text(
             text = "Select a Drill",
             fontSize = 24.sp,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(bottom = 16.dp)
         )
+
         LazyColumn(
             modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             items(drills) { drill ->
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable { navController.navigate("drill_detail/${drill.name}") },
-                    elevation = CardDefaults.cardElevation(4.dp)
+                    elevation = CardDefaults.cardElevation(6.dp),
+                    shape = RoundedCornerShape(12.dp)
                 ) {
                     Row(
                         modifier = Modifier
@@ -112,17 +157,35 @@ fun DrillSelectionScreen(navController: NavController) {
                             .padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Image(
-                            painter = painterResource(id = drill.imageResId),
-                            contentDescription = drill.name,
-                            modifier = Modifier.size(64.dp)
-                        )
+                        Box(
+                            modifier = Modifier
+                                .size(64.dp)
+                                .background(
+                                    drill.color.copy(alpha = 0.2f),
+                                    RoundedCornerShape(8.dp)
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = drill.icon,
+                                contentDescription = drill.name,
+                                modifier = Modifier.size(32.dp),
+                                tint = drill.color
+                            )
+                        }
                         Spacer(modifier = Modifier.width(16.dp))
-                        Text(
-                            text = drill.name,
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Medium
-                        )
+                        Column {
+                            Text(
+                                text = drill.name,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                text = "Tap to view details",
+                                fontSize = 14.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
             }
@@ -130,89 +193,238 @@ fun DrillSelectionScreen(navController: NavController) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DrillDetailScreen(navController: NavController, drill: Drill) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+            .padding(16.dp)
     ) {
-        Text(
-            text = drill.name,
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(bottom = 16.dp)
+        TopAppBar(
+            title = { Text(drill.name) },
+            navigationIcon = {
+                IconButton(onClick = { navController.popBackStack() }) {
+                    Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                }
+            }
         )
-        Image(
-            painter = painterResource(id = drill.imageResId),
-            contentDescription = drill.name,
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Drill Icon Display
+        Box(
             modifier = Modifier
-                .size(200.dp)
-                .padding(bottom = 16.dp)
-        )
-        Text(
-            text = "Description",
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
-        Text(
-            text = drill.description,
-            fontSize = 16.sp,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
-        Text(
-            text = "Tips",
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
-        Text(
-            text = drill.tips,
-            fontSize = 16.sp,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
+                .fillMaxWidth()
+                .height(200.dp)
+                .background(
+                    drill.color.copy(alpha = 0.1f),
+                    RoundedCornerShape(16.dp)
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = drill.icon,
+                contentDescription = drill.name,
+                modifier = Modifier.size(100.dp),
+                tint = drill.color
+            )
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Description Section
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            elevation = CardDefaults.cardElevation(4.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Description",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = drill.color,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+                Text(
+                    text = drill.description,
+                    fontSize = 16.sp,
+                    lineHeight = 24.sp
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Tips Section
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            elevation = CardDefaults.cardElevation(4.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Safety Tips",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = drill.color,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+                Text(
+                    text = drill.tips,
+                    fontSize = 16.sp,
+                    lineHeight = 24.sp
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.weight(1f))
+
+        // Start AR Button
         Button(
             onClick = { navController.navigate("ar_view/${drill.name}") },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = drill.color)
         ) {
-            Text(text = "Start AR Drill")
+            Text(
+                text = "Start AR Drill",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold
+            )
         }
     }
 }
 
 @Composable
-fun ARViewScreen(drillName: String) {
+fun ARViewScreen(drill: Drill) {
     val context = LocalContext.current
+    var isObjectPlaced by remember { mutableStateOf(false) }
+    var placedModelNode by remember { mutableStateOf<ModelNode?>(null) }
+
+    // Filament engine and loaders
+    val engine = rememberEngine()
+    val modelLoader = rememberModelLoader(engine)
+    val materialLoader = rememberMaterialLoader(engine)
+    val environmentLoader = rememberEnvironmentLoader(engine)
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
     ) {
-        AndroidView(
-            factory = {
-                ArSceneView(context).apply {
-                    planeFindingMode = ArSceneView.PlaneFindingMode.HORIZONTAL
-                    instructionsEnabled = true
-                    instructionsText = "Tap on ground to place drill marker"
+        ARScene(
+            modifier = Modifier.fillMaxSize(),
+            // Configure AR session settings
+            sessionConfiguration = { session, config ->
+                config.depthMode = when (session.isDepthModeSupported(Config.DepthMode.AUTOMATIC)) {
+                    true -> Config.DepthMode.AUTOMATIC
+                    else -> Config.DepthMode.DISABLED
                 }
+                config.instantPlacementMode = Config.InstantPlacementMode.LOCAL_Y_UP
+                config.lightEstimationMode = Config.LightEstimationMode.ENVIRONMENTAL_HDR
             },
-            modifier = Modifier.fillMaxSize()
-        ) { arSceneView ->
-            // Create a model node for the 3D object
-            val modelNode = ArModelNode(placementMode = PlacementMode.PLANE_HORIZONTAL).apply {
-                loadModelGlbAsync(
-                    glbFileLocation = "models/cube.glb",
-                    onLoaded = { _ ->
-                        Toast.makeText(context, "Placed $drillName marker", Toast.LENGTH_SHORT).show()
+            // Enable plane detection visualization
+            planeRenderer = true,
+            // Configure camera stream
+            cameraStream = rememberARCameraStream(materialLoader),
+            // Engine and loaders
+            engine = engine,
+            modelLoader = modelLoader,
+            materialLoader = materialLoader,
+            environmentLoader = environmentLoader,
+            // Child nodes (3D objects)
+            childNodes = placedModelNode?.let { listOf(it) } ?: emptyList(),
+            // Handle tap events
+            onTouchEvent = { motionEvent, hitResult ->
+                hitResult?.let { hit ->
+                    // Create new model node
+                    val newModelNode = ModelNode(
+                        modelInstance = modelLoader.createModelInstance(
+                            assetFileLocation = "models/cube.glb"
+                        ),
+                        scaleToUnits = 0.5f // Scale the model to 0.5 units
+                    ).apply {
+                        // Position the model at the hit location
+                        position = Position(
+                            hit.worldPosition.x,
+                            hit.worldPosition.y,
+                            hit.worldPosition.z
+                        )
                     }
-                )
+
+                    // Update the placed model node state
+                    placedModelNode = newModelNode
+                    isObjectPlaced = true
+
+                    Toast.makeText(
+                        context,
+                        "Placed ${drill.name} marker",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+                false // Don't consume the event
+            },
+            // Session lifecycle callbacks
+            onSessionCreated = { session ->
+                // AR session created
+            },
+            onSessionFailed = { exception ->
+                Toast.makeText(
+                    context,
+                    "AR Session failed: ${exception.message}",
+                    Toast.LENGTH_LONG
+                ).show()
             }
-            arSceneView.addChild(modelNode)
-            arSceneView.onTapAr = { hitResult, _ ->
-                modelNode.anchor = hitResult.createAnchor()
+        )
+
+        // Instructions overlay
+        Card(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = Color.Black.copy(alpha = 0.7f)
+            )
+        ) {
+            Text(
+                text = if (isObjectPlaced) {
+                    "✓ ${drill.name} marker placed! Tap elsewhere to move it."
+                } else {
+                    "Point camera at the ground and tap to place ${drill.name} marker"
+                },
+                color = Color.White,
+                modifier = Modifier.padding(16.dp),
+                fontSize = 14.sp
+            )
+        }
+
+        // Drill info overlay
+        Card(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = drill.color.copy(alpha = 0.9f)
+            )
+        ) {
+            Row(
+                modifier = Modifier.padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = drill.icon,
+                    contentDescription = drill.name,
+                    modifier = Modifier.size(24.dp),
+                    tint = Color.White
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = drill.name,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp
+                )
             }
         }
     }

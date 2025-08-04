@@ -40,7 +40,6 @@ android {
 }
 
 dependencies {
-
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
@@ -61,9 +60,11 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.9.0")
     implementation("androidx.compose.material3:material3:1.3.0")
     implementation("androidx.navigation:navigation-compose:2.7.0")
+    implementation("androidx.compose.material:material-icons-extended:1.7.0")
 
-    // ARCore and SceneView
-    implementation("io.github.sceneview:sceneview:2.0.0")
-    implementation("io.github.sceneview:sceneview-ar:2.0.0")
+    // ARCore and SceneView (Updated to latest versions)
+    implementation("io.github.sceneview:arsceneview:2.3.0")
     implementation("com.google.ar:core:1.46.0")
+    // Additional permissions for AR
+    implementation("androidx.activity:activity-ktx:1.9.0")
 }
