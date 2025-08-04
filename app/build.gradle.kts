@@ -65,6 +65,15 @@ dependencies {
     // ARCore and SceneView (Updated to latest versions)
     implementation("io.github.sceneview:arsceneview:2.3.0")
     implementation("com.google.ar:core:1.46.0")
+
     // Additional permissions for AR
     implementation("androidx.activity:activity-ktx:1.9.0")
+
+    // Additional SceneView dependencies for 3D rendering
+    implementation("io.github.sceneview:sceneview:2.3.0")
+
+    // Filament dependencies (required for 3D rendering)
+    implementation("com.google.android.filament:filament-android:1.51.5")
+    implementation("com.google.android.filament:gltfio-android:1.51.5")
+    implementation("com.google.android.filament:filament-utils-android:1.51.5")
 }
