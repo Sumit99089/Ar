@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
@@ -27,15 +28,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import android.widget.Toast
 import androidx.compose.ui.platform.LocalContext
-import io.github.sceneview.ar.ARScene
-import io.github.sceneview.ar.rememberARCameraStream
-import io.github.sceneview.rememberEngine
-import io.github.sceneview.rememberModelLoader
-import io.github.sceneview.rememberMaterialLoader
-import io.github.sceneview.rememberEnvironmentLoader
-import io.github.sceneview.node.ModelNode
-import io.github.sceneview.math.Position
-import com.google.ar.core.Config
+import androidx.compose.ui.viewinterop.AndroidView
 import com.example.arplacement.ui.theme.ARPlacementTheme
 
 // Data class for Drill
@@ -104,10 +97,7 @@ fun AppNavigation() {
         }
         composable("ar_view/{drillName}") { backStackEntry ->
             val drillName = backStackEntry.arguments?.getString("drillName") ?: ""
-            val drill = drills.find { it.name == drillName }
-            drill?.let {
-                ARViewScreen(it)
-            }
+            ARViewScreen(drillName)
         }
     }
 }
@@ -297,135 +287,100 @@ fun DrillDetailScreen(navController: NavController, drill: Drill) {
 }
 
 @Composable
-fun ARViewScreen(drill: Drill) {
+fun ARViewScreen(drillName: String) {
     val context = LocalContext.current
-    var isObjectPlaced by remember { mutableStateOf(false) }
-    var placedModelNode by remember { mutableStateOf<ModelNode?>(null) }
-
-    // Filament engine and loaders
-    val engine = rememberEngine()
-    val modelLoader = rememberModelLoader(engine)
-    val materialLoader = rememberMaterialLoader(engine)
-    val environmentLoader = rememberEnvironmentLoader(engine)
+    var planesDetected by remember { mutableStateOf(0) }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
     ) {
-        ARScene(
-            modifier = Modifier.fillMaxSize(),
-            // Configure AR session settings
-            sessionConfiguration = { session, config ->
-                config.depthMode = when (session.isDepthModeSupported(Config.DepthMode.AUTOMATIC)) {
-                    true -> Config.DepthMode.AUTOMATIC
-                    else -> Config.DepthMode.DISABLED
-                }
-                config.instantPlacementMode = Config.InstantPlacementMode.LOCAL_Y_UP
-                config.lightEstimationMode = Config.LightEstimationMode.ENVIRONMENTAL_HDR
-            },
-            // Enable plane detection visualization
-            planeRenderer = true,
-            // Configure camera stream
-            cameraStream = rememberARCameraStream(materialLoader),
-            // Engine and loaders
-            engine = engine,
-            modelLoader = modelLoader,
-            materialLoader = materialLoader,
-            environmentLoader = environmentLoader,
-            // Child nodes (3D objects)
-            childNodes = placedModelNode?.let { listOf(it) } ?: emptyList(),
-            // Handle tap events
-            onTouchEvent = { motionEvent, hitResult ->
-                hitResult?.let { hit ->
-                    // Create new model node
-                    val newModelNode = ModelNode(
-                        modelInstance = modelLoader.createModelInstance(
-                            assetFileLocation = "models/cube.glb"
-                        ),
-                        scaleToUnits = 0.5f // Scale the model to 0.5 units
-                    ).apply {
-                        // Position the model at the hit location
-                        position = Position(
-                            hit.worldPosition.x,
-                            hit.worldPosition.y,
-                            hit.worldPosition.z
-                        )
+        AndroidView(
+            factory = { ctx ->
+                io.github.sceneview.ar.ARSceneView(
+                    context = ctx,
+                    onSessionUpdated = { session, frame ->
+                        // Count detected planes
+                        val planes = session.getAllTrackables(com.google.ar.core.Plane::class.java)
+                        planesDetected = planes.count { it.trackingState == com.google.ar.core.TrackingState.TRACKING }
                     }
+                ).apply {
+                    // Enable plane detection
+                    planeRenderer.isEnabled = true
 
-                    // Update the placed model node state
-                    placedModelNode = newModelNode
-                    isObjectPlaced = true
-
-                    Toast.makeText(
-                        context,
-                        "Placed ${drill.name} marker",
-                        Toast.LENGTH_SHORT
-                    ).show()
+                    // Simple touch listener for now
+                    setOnTouchListener { _, motionEvent ->
+                        if (motionEvent.action == android.view.MotionEvent.ACTION_UP) {
+                            if (planesDetected > 0) {
+                                Toast.makeText(context, "✅ Tapped! $planesDetected planes detected. Placed $drillName marker", Toast.LENGTH_SHORT).show()
+                            } else {
+                                Toast.makeText(context, "❌ No planes detected yet. Keep moving device over flat surfaces.", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                        true
+                    }
                 }
-                false // Don't consume the event
             },
-            // Session lifecycle callbacks
-            onSessionCreated = { session ->
-                // AR session created
-            },
-            onSessionFailed = { exception ->
-                Toast.makeText(
-                    context,
-                    "AR Session failed: ${exception.message}",
-                    Toast.LENGTH_LONG
-                ).show()
-            }
+            modifier = Modifier.fillMaxSize()
         )
 
-        // Instructions overlay
+        // Status overlay
         Card(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .padding(16.dp),
             colors = CardDefaults.cardColors(
-                containerColor = Color.Black.copy(alpha = 0.7f)
-            )
+                containerColor = Color.Black.copy(alpha = 0.8f)
+            ),
+            shape = RoundedCornerShape(12.dp)
         ) {
-            Text(
-                text = if (isObjectPlaced) {
-                    "✓ ${drill.name} marker placed! Tap elsewhere to move it."
-                } else {
-                    "Point camera at the ground and tap to place ${drill.name} marker"
-                },
-                color = Color.White,
+            Column(
                 modifier = Modifier.padding(16.dp),
-                fontSize = 14.sp
-            )
-        }
-
-        // Drill info overlay
-        Card(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(16.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = drill.color.copy(alpha = 0.9f)
-            )
-        ) {
-            Row(
-                modifier = Modifier.padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Icon(
-                    imageVector = drill.icon,
-                    contentDescription = drill.name,
-                    modifier = Modifier.size(24.dp),
-                    tint = Color.White
-                )
-                Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = drill.name,
+                    text = drillName,
                     color = Color.White,
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp
                 )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Planes detected: $planesDetected",
+                    color = if (planesDetected > 0) Color.Green else Color.Yellow,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = if (planesDetected > 0)
+                        "✅ Tap anywhere to place marker"
+                    else
+                        "Move device slowly over flat surfaces",
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    textAlign = TextAlign.Center
+                )
             }
+        }
+
+        // Instructions overlay
+        Card(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = Color.Blue.copy(alpha = 0.8f)
+            ),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            Text(
+                text = "💡 Tips:\n• Use good lighting\n• Move slowly over tables/floors\n• Look for white dots on surfaces",
+                color = Color.White,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(12.dp)
+            )
         }
     }
 }
